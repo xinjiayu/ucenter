@@ -1,7 +1,3 @@
-// token负责token的产生，过期，更新操作;
-// token在更新时，要在一段时间内确保旧的token仍然可用，这样才能防止有点业务由于
-// 更新不即时调用接口失败
-
 package ucenter
 
 import (

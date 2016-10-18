@@ -52,3 +52,9 @@ func resetAccessToken(name string, token string) error {
 	_, err := db.Exec(sql, token)
 	return err
 }
+
+func resetPreAccessToken(name string, token string) error {
+	sql := "update " + Config.UserTableName + " set pre_access_token= ?"
+	_, err := db.Exec(sql, token)
+	return err
+}

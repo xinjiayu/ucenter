@@ -60,16 +60,17 @@ type Configure struct {
 
 // UserInfo user basic information
 type UserInfo struct {
-	ID            int64
-	UserName      string
-	Nickname      string
-	Email         string
-	Password      string
-	Registered    string
-	RefreshToken  string
-	RTokenCreated string
-	AccessToken   string
-	ATokenCreated string
+	ID             int64
+	UserName       string
+	Nickname       string
+	Email          string
+	Password       string
+	Registered     string
+	RefreshToken   string
+	RTokenCreated  string
+	AccessToken    string
+	ATokenCreated  string
+	PreAccessToken string
 }
 
 // Init check environment and init settings
@@ -135,6 +136,7 @@ func UserLogin(name string, password string) (string, string, error) {
 	if err != nil {
 		return "", "", ErrSetAccessToken
 	}
+	resetPreAccessToken(name, "")
 	return refreshToken, AccessToken, nil
 }
 
@@ -155,6 +157,12 @@ func CheckAccessToken(name string, accessToken string) error {
 		return ErrTokenExpired
 	}
 	if u.AccessToken != accessToken {
+		// pre_access_token is valid in 2 hours
+		if now.Unix()-tokenCreated.Unix() < int64(3600*2) {
+			if accessToken == u.PreAccessToken {
+				return nil
+			}
+		}
 		return ErrAccessTokenInvalid
 	}
 	return nil
@@ -170,6 +178,10 @@ func ResetAccessToken(name string, refreshToken string) (string, error) {
 	}
 	if u.RefreshToken != refreshToken {
 		return "", ErrRefreshTokenInvalid
+	}
+	err = resetPreAccessToken(name, u.AccessToken)
+	if err != nil {
+		return "", err
 	}
 	AccessToken := GetNewToken()
 	err = resetAccessToken(name, AccessToken)
@@ -187,6 +199,7 @@ func GetUserInfo(name string) (*UserInfo, error) {
 	}
 	u.RefreshToken = ""
 	u.AccessToken = ""
+	u.PreAccessToken = ""
 	return u, nil
 }
 
@@ -240,19 +253,22 @@ func getAllTables() ([]string, error) {
 	return tables, nil
 }
 
-// now not support user
+// create user table
+// pre_access_token: used when refresh access_token, but sometimes app
+// can't update right now, so pre_access_token is valid in 2 hours
 func createUserTable() error {
 	createStr := "create table " + Config.UserTableName + "(" +
-		"ID              bigint(20) unsigned NOT NULL AUTO_INCREMENT," +
-		"user_name       varchar(60) NOT NULL DEFAULT ''," +
-		"user_pass       varchar(255) NOT NULL DEFAULT ''," +
-		"user_nicename   varchar(50) NOT NULL DEFAULT ''," +
-		"user_email      varchar(100) NOT NULL DEFAULT ''," +
-		"user_registered datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-		"refresh_token   varchar(255) NOT NULL DEFAULT ‘’," +
-		"rtoken_created  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-		"access_token    varchar(255) NOT NULL DEFAULT ‘’," +
-		"atoken_created  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+		"ID               bigint(20) unsigned NOT NULL AUTO_INCREMENT," +
+		"user_name        varchar(60) NOT NULL DEFAULT ''," +
+		"user_pass        varchar(255) NOT NULL DEFAULT ''," +
+		"user_nicename    varchar(50) NOT NULL DEFAULT ''," +
+		"user_email       varchar(100) NOT NULL DEFAULT ''," +
+		"user_registered  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+		"refresh_token    varchar(255) NOT NULL DEFAULT ‘’," +
+		"rtoken_created   datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+		"access_token     varchar(255) NOT NULL DEFAULT ‘’," +
+		"atoken_created   datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+		"pre_access_token varchar(255) NOT NULL DEFAULT ‘’," +
 		"PRIMARY KEY (`ID`), " +
 		"KEY `user_email` (`user_email`)" +
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8"
