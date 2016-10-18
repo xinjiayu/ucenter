@@ -13,7 +13,7 @@ import (
 var (
 	db *sql.DB
 	// Config configure must initialization before call Init()
-	Config = Configure{"", "users", 0, 7 * 24 * 60 * 60}
+	Config = Configure{"", "uc_users", 0, 7 * 24 * 60 * 60}
 )
 
 var (
@@ -131,13 +131,13 @@ func UserLogin(name string, password string) (string, string, error) {
 	if err != nil {
 		return "", "", ErrSetRefreshToken
 	}
-	AccessToken := GetNewToken()
-	err = resetAccessToken(name, AccessToken)
+	accessToken := GetNewToken()
+	err = resetAccessToken(name, accessToken)
 	if err != nil {
 		return "", "", ErrSetAccessToken
 	}
 	resetPreAccessToken(name, "")
-	return refreshToken, AccessToken, nil
+	return refreshToken, accessToken, nil
 }
 
 // CheckAccessToken check user is valid?
@@ -264,11 +264,11 @@ func createUserTable() error {
 		"user_nicename    varchar(50) NOT NULL DEFAULT ''," +
 		"user_email       varchar(100) NOT NULL DEFAULT ''," +
 		"user_registered  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-		"refresh_token    varchar(255) NOT NULL DEFAULT ‘’," +
+		"refresh_token    varchar(255) NOT NULL DEFAULT ''," +
 		"rtoken_created   datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-		"access_token     varchar(255) NOT NULL DEFAULT ‘’," +
+		"access_token     varchar(255) NOT NULL DEFAULT ''," +
 		"atoken_created   datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-		"pre_access_token varchar(255) NOT NULL DEFAULT ‘’," +
+		"pre_access_token varchar(255) NOT NULL DEFAULT ''," +
 		"PRIMARY KEY (`ID`), " +
 		"KEY `user_email` (`user_email`)" +
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8"

@@ -18,8 +18,8 @@ func getUserByName(name string) (*UserInfo, error) {
 		if err = rows.Scan(&u.ID, &u.Nickname, &u.Password,
 			&u.Nickname, &u.Email, &u.Registered,
 			&u.RefreshToken, &u.RTokenCreated,
-			&u.AccessToken, &u.ATokenCreated); err == nil {
-			fmt.Println(u)
+			&u.AccessToken, &u.ATokenCreated,
+			&u.PreAccessToken); err == nil {
 			return &u, nil
 		}
 		fmt.Println(err)
@@ -40,16 +40,22 @@ func createUser(user UserInfo) error {
 }
 
 func resetRefreshToken(name string, token string) error {
-	sql := "update " + Config.UserTableName + " set refresh_token= ? and " +
-		" rtoken_created = now()"
-	_, err := db.Exec(sql, token)
+	sql := "update " + Config.UserTableName + " set refresh_token= ?, " +
+		" rtoken_created = now() where user_name=?"
+	_, err := db.Exec(sql, token, name)
+	if err != nil {
+		fmt.Println(err)
+	}
 	return err
 }
 
 func resetAccessToken(name string, token string) error {
-	sql := "update " + Config.UserTableName + " set access_token= ? and " +
-		" atoken_created = now()"
-	_, err := db.Exec(sql, token)
+	sql := "update " + Config.UserTableName + " set access_token= ?, " +
+		" atoken_created = now() where user_name=?"
+	_, err := db.Exec(sql, token, name)
+	if err != nil {
+		fmt.Println(err)
+	}
 	return err
 }
 
