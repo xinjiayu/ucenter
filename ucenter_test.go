@@ -13,10 +13,8 @@ func TestInit(t *testing.T) {
 func TestCreateUser(t *testing.T) {
 	Config.MysqlConnStr = "root:@/ucenter?charset=utf8"
 	Init()
-	var user UserInfo
-	user.UserName = "sails"
-	user.Password = "twtpsu31"
-	user.Email = "sailsxu@qq.com"
+	user := UserInfo{UserName: "sails", Password: "twtpsu31",
+		Email: "sailsxu@qq.com"}
 	err := UserRegister(user)
 	if err != nil {
 		fmt.Println(err)

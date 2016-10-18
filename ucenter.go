@@ -256,6 +256,8 @@ func getAllTables() ([]string, error) {
 // create user table
 // pre_access_token: used when refresh access_token, but sometimes app
 // can't update right now, so pre_access_token is valid in 2 hours
+// session information should not save in database for web site,
+// bacause it will change very frequently
 func createUserTable() error {
 	createStr := "create table " + Config.UserTableName + "(" +
 		"ID               bigint(20) unsigned NOT NULL AUTO_INCREMENT," +

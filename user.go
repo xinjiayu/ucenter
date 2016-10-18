@@ -6,7 +6,10 @@ import (
 )
 
 func getUserByName(name string) (*UserInfo, error) {
-	sql := "select * from " + Config.UserTableName + " where user_name = ?"
+	sql := "select ID, user_name, user_pass, user_nicename, user_email," +
+		" user_registered, refresh_token, rtoken_created," +
+		" access_token, atoken_created, pre_access_token " +
+		" from " + Config.UserTableName + " where user_name = ?"
 	rows, err := db.Query(sql, name)
 	if err != nil {
 		return nil, err
