@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/garyburd/redigo/redis"
+	"strconv"
 	"time"
 	// for mysql driver
 	_ "github.com/go-sql-driver/mysql"
@@ -12,13 +14,20 @@ import (
 
 var (
 	// Config configure must initialization before call Init()
-	Config = Configure{"", "uc_users", 0, 7 * 24 * 60 * 60, 24 * 60 * 60}
+	Config = Configure{
+		UserTableName:         "uc_users",
+		TokenExpiresIn:        7 * 24 * 60 * 60, // one week
+		SessionExpiresIn:      24 * 60 * 60,     // a day
+		PreTokenExpireIn:      2 * 60 * 60,      // two hours
+		InMemoryCacheExpireIn: 2 * 60 * 60,      // two hours
+	}
 
 	// inner variable
 	db            *sql.DB
 	tokenCache    *Cache
 	preTokenCache *Cache
 	sessionCache  *Cache
+	redisClient   *redis.Conn
 )
 
 var (
@@ -51,6 +60,12 @@ var (
 
 	// ErrTimeParse parse string format to Time error
 	ErrTimeParse = errors.New("parse string format to Time error")
+
+	// ErrSetRedis set key/value to reids error
+	ErrSetRedis = errors.New("set key/value to reids error")
+
+	// ErrGetRedis get key from reids error
+	ErrGetRedis = errors.New("get key from reids error")
 )
 
 // Configure configure for data and validation
@@ -60,9 +75,13 @@ type Configure struct {
 	UserTableName string
 	NodeIdentfy   int
 	// access_token expires_in
-	TokenExpiresIn int
+	TokenExpiresIn   int
+	PreTokenExpireIn int
 	// session expires_in
 	SessionExpiresIn int
+	// RedisConnStr connect string for redis, "172.17.0.89:6379"
+	RedisConnStr          string
+	InMemoryCacheExpireIn int
 }
 
 // UserInfo user basic information
@@ -106,12 +125,22 @@ func Init() {
 		fmt.Println(err)
 		return
 	}
-	tokenCache = &Cache{expire: 2 * 60 * 60} // two hours
-	tokenCache.Init()
-	preTokenCache = &Cache{expire: 2 * 60 * 60} // two hours
-	preTokenCache.Init()
-	sessionCache = &Cache{expire: Config.SessionExpiresIn}
-	sessionCache.Init()
+	if len(Config.RedisConnStr) == 0 {
+		tokenCache = &Cache{expire: Config.InMemoryCacheExpireIn}
+		tokenCache.Init()
+		preTokenCache = &Cache{expire: Config.InMemoryCacheExpireIn}
+		preTokenCache.Init()
+		sessionCache = &Cache{expire: Config.SessionExpiresIn}
+		sessionCache.Init()
+	} else {
+		c, err := redis.DialTimeout("tcp", Config.RedisConnStr,
+			0, 1*time.Second, 1*time.Second)
+		if err != nil {
+			redisClient = nil
+			fmt.Println(err)
+		}
+		redisClient = &c
+	}
 }
 
 // UserRegister register must have set username and password
@@ -134,7 +163,6 @@ func UserRegister(user UserInfo) error {
 // first token : refresh_token
 // second token: access_token
 func UserLogin(name string, password string) (*LoginResult, error) {
-
 	if len(name) == 0 || len(password) == 0 {
 		return nil, ErrParamInvalid
 	}
@@ -159,11 +187,28 @@ func UserLogin(name string, password string) (*LoginResult, error) {
 	}
 	resetPreAccessToken(name, "")
 
-	tokenCache.Set(name, accessToken)
-	preTokenCache.Set(name, "")
-
 	session := GetNewToken()
-	sessionCache.Set(name, session)
+
+	// cache token and session
+	if redisClient == nil {
+		tokenCache.Set(name, accessToken)
+		preTokenCache.Delete(name)
+		sessionCache.Set(name, session)
+	} else {
+		_, err := (*redisClient).Do("SET", "token@"+name, accessToken,
+			"EX", strconv.Itoa(Config.TokenExpiresIn))
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrSetRedis
+		}
+		(*redisClient).Do("DEL", "pretoken@"+name)
+		_, err = (*redisClient).Do("SET", "session@"+name, session,
+			"EX", strconv.Itoa(Config.SessionExpiresIn))
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrSetRedis
+		}
+	}
 
 	return &LoginResult{accessToken, refreshToken, session}, nil
 }
@@ -172,6 +217,28 @@ func UserLogin(name string, password string) (*LoginResult, error) {
 // because of access_token maybe check every request in app, so
 // need save it in cache used to reduce the load
 func CheckAccessToken(name string, accessToken string) error {
+	if redisClient != nil {
+		// because of redis could not miss data, so it don't need lookup
+		// database
+		token, err := redis.String((*redisClient).Do("GET", "token@"+name))
+		if err != nil {
+			fmt.Println("redis get failed:", err)
+			return ErrGetRedis
+		}
+		if token == accessToken {
+			return nil
+		}
+		pretoken, err := redis.String((*redisClient).Do("GET",
+			"pretoken@"+name))
+		if err != nil {
+			fmt.Println("redis get failed:", err)
+			return ErrGetRedis
+		}
+		if pretoken == accessToken {
+			return nil
+		}
+		return ErrTokenExpired
+	}
 	token := tokenCache.Get(name)
 	if len(token) > 0 { // have load from database
 		if token == accessToken {
@@ -204,7 +271,7 @@ func CheckAccessToken(name string, accessToken string) error {
 	tokenCache.Set(name, u.AccessToken)
 	if u.AccessToken != accessToken {
 		// pre_access_token is valid in 2 hours
-		if now.Unix()-tokenCreated.Unix() < int64(3600*2) {
+		if now.Unix()-tokenCreated.Unix() < int64(Config.PreTokenExpireIn) {
 			if accessToken == u.PreAccessToken {
 				return nil
 			}
@@ -234,18 +301,46 @@ func ResetAccessToken(name string, refreshToken string) (string, error) {
 	if err != nil {
 		return "", ErrSetAccessToken
 	}
-	tokenCache.Set(name, AccessToken)
-	preTokenCache.Set(name, u.AccessToken)
+	if redisClient == nil {
+		tokenCache.Set(name, AccessToken)
+		preTokenCache.Set(name, u.AccessToken)
+	} else {
+		_, err := (*redisClient).Do("SET", "token@"+name, AccessToken,
+			"EX", strconv.Itoa(Config.TokenExpiresIn))
+		if err != nil {
+			fmt.Println(err)
+			return "", ErrSetRedis
+		}
+		_, err = (*redisClient).Do("SET", "pretoken@"+name, u.AccessToken,
+			"EX", strconv.Itoa(Config.PreTokenExpireIn))
+		if err != nil {
+			fmt.Println(err)
+			return "", ErrSetRedis
+		}
+	}
+
 	return AccessToken, nil
 }
 
 // CheckSession check session for web site,
 // and it will auto refresh session expires_in
 func CheckSession(name string, session string) bool {
+	if redisClient != nil {
+		s, err := redis.String((*redisClient).Do("GET", "session@"+name))
+		if err != nil {
+			fmt.Println("redis get failed:", err)
+			return false
+		}
+		if s == session {
+			return true
+		}
+		return false
+	}
 	s := sessionCache.Get(name)
 	if len(s) == 0 || s != session {
 		return false
 	}
+
 	sessionCache.Set(name, session)
 	return true
 }
@@ -292,6 +387,7 @@ func makeSureUserTableExist() error {
 		}
 	}
 	if !findedUserTable {
+		fmt.Println("not find " + Config.UserTableName)
 		err := createUserTable()
 		if err != nil {
 			return err

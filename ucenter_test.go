@@ -55,3 +55,38 @@ func TestLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoginWithRedis(t *testing.T) {
+	Config.RedisConnStr = ":6379"
+	Init()
+	name := "sails"
+	pwd := "twtpsu31"
+	loginRet, err := UserLogin(name, pwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("refresh_token:" + loginRet.RefreshToken)
+	fmt.Println("access_token:" + loginRet.AccessToken)
+
+	err = CheckAccessToken(name, loginRet.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preAccessToken := loginRet.AccessToken
+
+	accessToken, err := ResetAccessToken(name, loginRet.RefreshToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// check by access token
+	err = CheckAccessToken(name, accessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// check by pre access token
+	err = CheckAccessToken(name, preAccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

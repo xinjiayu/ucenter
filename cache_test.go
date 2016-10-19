@@ -6,7 +6,7 @@ import (
 )
 
 func TestCache(t *testing.T) {
-	cache := Cache{expire: 5, checkInterval: 2}
+	cache := Cache{expire: 1, checkInterval: 1}
 	cache.Init()
 	defer cache.Close()
 	cache.Set("name", "xu")
@@ -14,7 +14,7 @@ func TestCache(t *testing.T) {
 	if v != "xu" {
 		t.Fatal("cache get and set error")
 	}
-	time.Sleep(13 * time.Second)
+	time.Sleep(2 * time.Second)
 	v = cache.Get("name")
 	if v != "" {
 		t.Fatal("cache set expire error")
