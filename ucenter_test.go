@@ -57,6 +57,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestLoginWithRedis(t *testing.T) {
+	Config.MysqlConnStr = "root:@/ucenter?charset=utf8"
 	Config.RedisConnStr = ":6379"
 	Init()
 	name := "sails"
