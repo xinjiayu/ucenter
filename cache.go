@@ -7,12 +7,14 @@ import (
 )
 
 // Cache implements a simple in-memory cache used token check
-// expire at least 5 seconds
+// expire at least 60 seconds for cpu load
 type Cache struct {
 	sync.Mutex
-	mapping map[string]*Value
-	expire  int
-	end     chan int
+	mapping       map[string]*Value
+	expire        int
+	end           chan int
+	checkInterval int
+	startTime     int64
 }
 
 // Value cache value which created time
@@ -23,17 +25,22 @@ type Value struct {
 
 // Init cache,
 func (c *Cache) Init() {
+	c.startTime = time.Now().Unix()
 	c.mapping = make(map[string]*Value)
 	c.end = make(chan int, 1)
-	if c.expire >= 5 { // At least 5 seconds
-		go c.checkExpired()
+	if c.checkInterval == 0 {
+		c.checkInterval = 60
 	}
+	if c.expire == 0 {
+		c.expire = 60
+	}
+	go c.checkExpired()
 }
 
 func (c *Cache) checkExpired() {
 	for {
 		select {
-		case <-time.After(2 * time.Second):
+		case <-time.After(time.Duration(c.checkInterval) * time.Second):
 			c.Lock()
 			now := time.Now().Unix()
 			var cleankeys []string
@@ -67,6 +74,10 @@ func (c *Cache) Close() {
 func (c *Cache) Get(key string) string {
 	c.Lock()
 	defer c.Unlock()
+	if c.mapping == nil {
+		fmt.Println("cache not init")
+		return ""
+	}
 	v, ok := c.mapping[key]
 	if ok {
 		return v.value
@@ -78,6 +89,10 @@ func (c *Cache) Get(key string) string {
 func (c *Cache) Set(key string, val string) {
 	c.Lock()
 	defer c.Unlock()
+	if c.mapping == nil {
+		fmt.Println("cache not init")
+		return
+	}
 	v := Value{val, time.Now().Unix()}
 	c.mapping[key] = &v
 }

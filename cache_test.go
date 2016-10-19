@@ -6,7 +6,7 @@ import (
 )
 
 func TestCache(t *testing.T) {
-	cache := Cache{expire: 5}
+	cache := Cache{expire: 5, checkInterval: 2}
 	cache.Init()
 	defer cache.Close()
 	cache.Set("name", "xu")

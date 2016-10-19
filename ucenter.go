@@ -11,9 +11,14 @@ import (
 )
 
 var (
-	db *sql.DB
 	// Config configure must initialization before call Init()
-	Config = Configure{"", "uc_users", 0, 7 * 24 * 60 * 60}
+	Config = Configure{"", "uc_users", 0, 7 * 24 * 60 * 60, 24 * 60 * 60}
+
+	// inner variable
+	db            *sql.DB
+	tokenCache    *Cache
+	preTokenCache *Cache
+	sessionCache  *Cache
 )
 
 var (
@@ -56,6 +61,8 @@ type Configure struct {
 	NodeIdentfy   int
 	// access_token expires_in
 	TokenExpiresIn int
+	// session expires_in
+	SessionExpiresIn int
 }
 
 // UserInfo user basic information
@@ -71,6 +78,13 @@ type UserInfo struct {
 	AccessToken    string
 	ATokenCreated  string
 	PreAccessToken string
+}
+
+// LoginResult Login result
+type LoginResult struct {
+	AccessToken  string
+	RefreshToken string
+	Session      string
 }
 
 // Init check environment and init settings
@@ -92,6 +106,12 @@ func Init() {
 		fmt.Println(err)
 		return
 	}
+	tokenCache = &Cache{expire: 2 * 60 * 60} // two hours
+	tokenCache.Init()
+	preTokenCache = &Cache{expire: 2 * 60 * 60} // two hours
+	preTokenCache.Init()
+	sessionCache = &Cache{expire: Config.SessionExpiresIn}
+	sessionCache.Init()
 }
 
 // UserRegister register must have set username and password
@@ -113,37 +133,57 @@ func UserRegister(user UserInfo) error {
 // UserLogin  user login, if login succeed will return two token string
 // first token : refresh_token
 // second token: access_token
-func UserLogin(name string, password string) (string, string, error) {
+func UserLogin(name string, password string) (*LoginResult, error) {
+
 	if len(name) == 0 || len(password) == 0 {
-		return "", "", ErrParamInvalid
+		return nil, ErrParamInvalid
 	}
 	u, err := getUserByName(name)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	pwd := md5.Sum([]byte(password))
 	pwdStr := fmt.Sprintf("%x", pwd)
 	if pwdStr != u.Password {
-		return "", "", ErrPwdInvalid
+		return nil, ErrPwdInvalid
 	}
 	refreshToken := GetNewToken()
 	err = resetRefreshToken(name, refreshToken)
 	if err != nil {
-		return "", "", ErrSetRefreshToken
+		return nil, ErrSetRefreshToken
 	}
 	accessToken := GetNewToken()
 	err = resetAccessToken(name, accessToken)
 	if err != nil {
-		return "", "", ErrSetAccessToken
+		return nil, ErrSetAccessToken
 	}
 	resetPreAccessToken(name, "")
-	return refreshToken, accessToken, nil
+
+	tokenCache.Set(name, accessToken)
+	preTokenCache.Set(name, "")
+
+	session := GetNewToken()
+	sessionCache.Set(name, session)
+
+	return &LoginResult{accessToken, refreshToken, session}, nil
 }
 
 // CheckAccessToken check user is valid?
 // because of access_token maybe check every request in app, so
 // need save it in cache used to reduce the load
 func CheckAccessToken(name string, accessToken string) error {
+	token := tokenCache.Get(name)
+	if len(token) > 0 { // have load from database
+		if token == accessToken {
+			return nil
+		}
+		preToken := preTokenCache.Get(name)
+		if preToken == accessToken {
+			return nil
+		}
+		return ErrAccessTokenInvalid
+	}
+
 	u, err := getUserByName(name)
 	if err != nil {
 		return err
@@ -153,9 +193,15 @@ func CheckAccessToken(name string, accessToken string) error {
 	if err != nil {
 		return ErrTimeParse
 	}
-	if now.Unix()-tokenCreated.Unix() > int64(Config.TokenExpiresIn) {
+	if now.Unix()-tokenCreated.Unix() > int64(Config.TokenExpiresIn) ||
+		u.AccessToken == "" {
+		// expire_in or kill down
+		preTokenCache.Set(name, "nil")
+		tokenCache.Set(name, "nil")
 		return ErrTokenExpired
 	}
+	preTokenCache.Set(name, u.PreAccessToken)
+	tokenCache.Set(name, u.AccessToken)
 	if u.AccessToken != accessToken {
 		// pre_access_token is valid in 2 hours
 		if now.Unix()-tokenCreated.Unix() < int64(3600*2) {
@@ -188,7 +234,20 @@ func ResetAccessToken(name string, refreshToken string) (string, error) {
 	if err != nil {
 		return "", ErrSetAccessToken
 	}
+	tokenCache.Set(name, AccessToken)
+	preTokenCache.Set(name, u.AccessToken)
 	return AccessToken, nil
+}
+
+// CheckSession check session for web site,
+// and it will auto refresh session expires_in
+func CheckSession(name string, session string) bool {
+	s := sessionCache.Get(name)
+	if len(s) == 0 || s != session {
+		return false
+	}
+	sessionCache.Set(name, session)
+	return true
 }
 
 // GetUserInfo get user basic info but not contain authentication information
@@ -211,6 +270,11 @@ func KillOffLine(name string) error {
 	}
 	resetRefreshToken(name, "")
 	resetAccessToken(name, "")
+
+	tokenCache.Set(name, "nil")
+	preTokenCache.Set(name, "nil")
+	sessionCache.Set(name, "")
+
 	return nil
 }
 

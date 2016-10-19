@@ -26,20 +26,20 @@ func TestLogin(t *testing.T) {
 	Init()
 	name := "sails"
 	pwd := "twtpsu31"
-	refreshToken, accessToken, err := UserLogin(name, pwd)
+	loginRet, err := UserLogin(name, pwd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("refresh_token:" + refreshToken)
-	fmt.Println("access_token:" + accessToken)
+	fmt.Println("refresh_token:" + loginRet.RefreshToken)
+	fmt.Println("access_token:" + loginRet.AccessToken)
 
-	err = CheckAccessToken(name, accessToken)
+	err = CheckAccessToken(name, loginRet.AccessToken)
 	if err != nil {
 		t.Fatal(err)
 	}
-	preAccessToken := accessToken
+	preAccessToken := loginRet.AccessToken
 
-	accessToken, err = ResetAccessToken(name, refreshToken)
+	accessToken, err := ResetAccessToken(name, loginRet.RefreshToken)
 	if err != nil {
 		t.Fatal(err)
 	}
