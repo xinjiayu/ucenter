@@ -406,6 +406,7 @@ func createUserTable() error {
 		"user_email       varchar(100) NOT NULL DEFAULT ''," +
 		"user_registered  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP," +
 		"PRIMARY KEY (`ID`), " +
+		"KEY `user_name` (`user_name`), " +
 		"KEY `user_email` (`user_email`)" +
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8"
 	_, err := db.Exec(createStr)
