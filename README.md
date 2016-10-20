@@ -31,12 +31,11 @@ err := UserRegister(user)
 ```
 loginRet, err := UserLogin(name, pwd)
 ```
-```
 + 用户验证：
 ```
 err := CheckAccessToken(name, accssToken)
 ```
-* 更新AccessToken
++ 更新AccessToken
 ```
 accessToken, err := ResetAccessToken(name, RefreshToken)
 ```
