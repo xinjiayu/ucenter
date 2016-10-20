@@ -14,13 +14,13 @@ ucenter自带了一个简单的cache，但是如果会运行多个ucenter实例�
 ```
 Config.RedisConnStr = ":6379"
 ```
-### 初始化
+
+### 使用
++ 初始化
 用于初始化一数据表和cache
 ```
 Init()
 ```
-
-### 使用
 + 用户注册:
 ```
 user := UserInfo{UserName: "sails", Password: "twtpsu31",
@@ -32,20 +32,11 @@ err := UserRegister(user)
 loginRet, err := UserLogin(name, pwd)
 ```
 ```
-type LoginResult struct {
-	RefreshToken string
-	AccessToken  string
-	Session      string
-	AccessTokenExpiresIn int
-	SessionExpiresIn     int
-}
-```
 + 用户验证：
 ```
 err := CheckAccessToken(name, accssToken)
 ```
-
-+ 更新AccessToken
+* 更新AccessToken
 ```
 accessToken, err := ResetAccessToken(name, RefreshToken)
 ```
@@ -56,12 +47,9 @@ err := KillOffLine(name)
 
 
 ## ucenter 将实现的特性
+### 用户管理方面
++ 加强用户管理
 
-#### 提供三个部分的api
-1. 用户注册，登录，修改密码；
-2. 用户验证；
-3. 用户管理；
-
-#### 集成oauth2.0支持
-1. QQ
-2. 微博
+### 集成oauth2.0支持
++ QQ
++ 微博
