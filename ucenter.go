@@ -104,9 +104,11 @@ type UserInfo struct {
 
 // LoginResult Login result
 type LoginResult struct {
-	AccessToken  string
-	RefreshToken string
-	Session      string
+	RefreshToken         string
+	AccessToken          string
+	Session              string
+	AccessTokenExpiresIn int
+	SessionExpiresIn     int
 }
 
 // Init check environment and init settings
@@ -199,7 +201,8 @@ func UserLogin(name string, password string) (*LoginResult, error) {
 		sessionCache.Set(name, session)
 	}
 
-	return &LoginResult{accessToken, refreshToken, session}, nil
+	return &LoginResult{refreshToken, accessToken, session,
+		Config.TokenExpiresIn, Config.SessionExpiresIn}, nil
 }
 
 // CheckAccessToken check user is valid?
