@@ -14,7 +14,7 @@ func TestCache(t *testing.T) {
 	if v != "xu" {
 		t.Fatal("cache get and set error")
 	}
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	v = cache.Get("name")
 	if v != "" {
 		t.Fatal("cache set expire error")
