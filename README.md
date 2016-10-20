@@ -21,13 +21,13 @@ Init()
 ```
 
 ### 使用
-1. 用户注册:
++ 用户注册:
 ```
 user := UserInfo{UserName: "sails", Password: "twtpsu31",
 		Email: "sailsxu@qq.com"}
 err := UserRegister(user)
 ```
-2. 登录:
++ 登录:
 ```
 loginRet, err := UserLogin(name, pwd)
 ```
@@ -40,16 +40,16 @@ type LoginResult struct {
 	SessionExpiresIn     int
 }
 ```
-3. 用户验证：
++ 用户验证：
 ```
 err := CheckAccessToken(name, accssToken)
 ```
 
-4. 更新AccessToken
++ 更新AccessToken
 ```
 accessToken, err := ResetAccessToken(name, RefreshToken)
 ```
-5. 退出:
++ 退出:
 ```
 err := KillOffLine(name)
 ```
