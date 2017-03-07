@@ -28,7 +28,7 @@ var (
 	accessTokenCache    *Cache
 	preAccessTokenCache *Cache
 	sessionCache        *Cache
-	redisClient         *redis.Conn
+	redisPool           *redis.Pool
 )
 
 var (
@@ -138,13 +138,17 @@ func Init() {
 		sessionCache = &Cache{expire: Config.SessionExpiresIn}
 		sessionCache.Init()
 	} else {
-		c, err := redis.DialTimeout("tcp", Config.RedisConnStr,
-			0, 1*time.Second, 1*time.Second)
-		if err != nil {
-			redisClient = nil
-			fmt.Println(err)
+		redisPool = &redis.Pool{
+			MaxIdle:     3,                 // adjust to your needs
+			IdleTimeout: 240 * time.Second, // adjust to your needs
+			Dial: func() (redis.Conn, error) {
+				c, err := redis.Dial("tcp", Config.RedisConnStr)
+				if err != nil {
+					return nil, err
+				}
+				return c, err
+			},
 		}
-		redisClient = &c
 	}
 }
 
@@ -195,7 +199,7 @@ func UserLogin(name string, password string) (*LoginResult, error) {
 	session := GetNewToken()
 
 	// cache token and session if not use redis
-	if redisClient == nil {
+	if redisPool == nil {
 		accessTokenCache.Set(name, accessToken)
 		preAccessTokenCache.Delete(name)
 		sessionCache.Set(name, session)
@@ -210,7 +214,7 @@ func UserLogin(name string, password string) (*LoginResult, error) {
 // need save it in cache used to reduce the load
 func CheckAccessToken(name string, accessToken string) error {
 	// if not use redis, check in-memory cache first
-	if redisClient == nil {
+	if redisPool == nil {
 		token := accessTokenCache.Get(name)
 		if len(token) > 0 { // have load from database
 			if token == accessToken {
@@ -229,7 +233,7 @@ func CheckAccessToken(name string, accessToken string) error {
 	}
 
 	// check redis
-	if redisClient != nil {
+	if redisPool != nil {
 		if accessToken == t.AccessToken ||
 			accessToken == t.PreAccessToken {
 			return nil
@@ -252,7 +256,7 @@ func CheckAccessToken(name string, accessToken string) error {
 		return ErrTokenExpired
 	}
 	// database have right value
-	if redisClient == nil {
+	if redisPool == nil {
 		preAccessTokenCache.Set(name, t.PreAccessToken)
 		accessTokenCache.Set(name, t.AccessToken)
 	}
@@ -290,7 +294,7 @@ func ResetAccessToken(name string, refreshToken string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if redisClient == nil {
+	if redisPool == nil {
 		accessTokenCache.Set(name, AccessToken)
 		preAccessTokenCache.Set(name, t.AccessToken)
 	}
@@ -301,8 +305,10 @@ func ResetAccessToken(name string, refreshToken string) (string, error) {
 // CheckSession check session for web site,
 // and it will auto refresh session expires_in
 func CheckSession(name string, session string) bool {
-	if redisClient != nil {
-		s, err := redis.String((*redisClient).Do("GET", "session@"+name))
+	if redisPool != nil {
+		c := redisPool.Get()
+		defer c.Close()
+		s, err := redis.String(c.Do("GET", "session@"+name))
 		if err != nil {
 			fmt.Println("redis get failed:", err)
 			return false

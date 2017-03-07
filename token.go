@@ -61,7 +61,7 @@ const (
 
 // SetRefreshToken set refresh token for database or redis
 func SetRefreshToken(name string, token string) error {
-	if redisClient == nil {
+	if redisPool == nil {
 		u, err := GetTokenInfo(name)
 		if u == nil {
 			sql := "insert into " + Config.TokenTablename +
@@ -86,7 +86,9 @@ func SetRefreshToken(name string, token string) error {
 
 	}
 	// set redis cache, refresh_token 不设置过期时间
-	_, err := (*redisClient).Do("SET", "refresh_token@"+name, token)
+	c := redisPool.Get()
+	defer c.Close()
+	_, err := c.Do("SET", "refresh_token@"+name, token)
 	if err != nil {
 		fmt.Println(err)
 		return ErrSetRefreshToken
@@ -96,7 +98,7 @@ func SetRefreshToken(name string, token string) error {
 
 // SetAccessToken set refresh_token for database or redis
 func SetAccessToken(name string, token string) error {
-	if redisClient == nil {
+	if redisPool == nil {
 		u, err := GetTokenInfo(name)
 		if u == nil {
 			sql := "insert into " + Config.TokenTablename +
@@ -121,7 +123,9 @@ func SetAccessToken(name string, token string) error {
 
 	}
 	// set redis cache, access_token
-	_, err := (*redisClient).Do("SET", "access_token@"+name, token,
+	c := redisPool.Get()
+	defer c.Close()
+	_, err := c.Do("SET", "access_token@"+name, token,
 		"EX", strconv.Itoa(Config.TokenExpiresIn))
 	if err != nil {
 		fmt.Println(err)
@@ -132,7 +136,7 @@ func SetAccessToken(name string, token string) error {
 
 // SetPreAccessToken set refresh_token for database or redis
 func SetPreAccessToken(name string, token string) error {
-	if redisClient == nil {
+	if redisPool == nil {
 		u, err := GetTokenInfo(name)
 		if u == nil {
 			sql := "insert into " + Config.TokenTablename +
@@ -157,7 +161,9 @@ func SetPreAccessToken(name string, token string) error {
 
 	}
 	// set redis cache, pre_access_token
-	_, err := (*redisClient).Do("SET", "pre_access_token@"+name, token,
+	c := redisPool.Get()
+	defer c.Close()
+	_, err := c.Do("SET", "pre_access_token@"+name, token,
 		"EX", strconv.Itoa(Config.PreTokenExpireIn))
 	if err != nil {
 		fmt.Println(err)
@@ -168,7 +174,7 @@ func SetPreAccessToken(name string, token string) error {
 
 // GetTokenInfo get token from database or redis
 func GetTokenInfo(name string) (*TokenInfo, error) {
-	if redisClient == nil {
+	if redisPool == nil {
 		sql := "select user_name,refresh_token,rtoken_created," +
 			"access_token,atoken_created,pre_access_token from " +
 			Config.TokenTablename + " where user_name=?"
@@ -188,19 +194,21 @@ func GetTokenInfo(name string) (*TokenInfo, error) {
 		}
 		return nil, ErrTokenNotExist
 	}
-	refreshToken, err := redis.String((*redisClient).Do("GET",
+	c := redisPool.Get()
+	defer c.Close()
+	refreshToken, err := redis.String(c.Do("GET",
 		"refresh_token@"+name))
 	if err != nil {
 		fmt.Println("redis get failed:", err)
 		return nil, ErrGetRedis
 	}
-	accessToken, err := redis.String((*redisClient).Do("GET",
+	accessToken, err := redis.String(c.Do("GET",
 		"access_token@"+name))
 	if err != nil {
 		fmt.Println("redis get failed:", err)
 		return nil, ErrGetRedis
 	}
-	pretoken, err := redis.String((*redisClient).Do("GET",
+	pretoken, err := redis.String(c.Do("GET",
 		"pre_access_token@"+name))
 	if err != nil {
 		fmt.Println("redis get failed:", err)
